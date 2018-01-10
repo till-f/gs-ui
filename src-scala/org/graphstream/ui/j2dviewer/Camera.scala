@@ -104,13 +104,13 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   	/** The rendering back-end. */
   	protected var bck:Backend = null
 	
-  	/** Which node is visible. This allows to mark invisible nodes to fasten visibility tests for
-  	  * nodes, attached sprites and edges. The visibility test is heavy, and we often need to test
-  	  * for nodes visibility. This allows to do it only once per rendering step. Hence the storage
-  	  * of the invisible nodes here. */
+  	/** Which node is visible. */
   	protected val nodeInvisible = new HashSet[String]
-  	
-  	/** The graph view port, if any. The graph view port is a view inside the graph space. It allows
+
+	  /** Which sprite is visible. */
+	  protected val spriteInvisible = new HashSet[String]
+
+	/** The graph view port, if any. The graph view port is a view inside the graph space. It allows
   	  * to compute the view according to a specified area of the graph space instead of the graph
   	  * dimensions. */
   	protected var gviewport:Array[Double] = null
@@ -167,7 +167,7 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   	    	if(styleVisible(element)) element.getSelectorType match {
   				case NODE   => ! nodeInvisible.contains(element.getId)
   				case EDGE   => isEdgeVisible(element.asInstanceOf[GraphicEdge])
-  				case SPRITE => isSpriteVisible(element.asInstanceOf[GraphicSprite])
+  				case SPRITE => ! spriteInvisible.contains(element.getId)
   				case _      => false
   	    	} else false
   		}
@@ -192,16 +192,21 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   	  * @param y The point ordinate.
   	  * @return The first node or sprite at the given coordinates or null if nothing found. */
   	def findNodeOrSpriteAt(graph:GraphicGraph, x:Double, y:Double):GraphicElement = {
+      // add offset of viewport, because find(...) is always called without offset
+      // in most cases the offset of the viewport is 0 anyway
+      var xT = x + metrics.viewport(0)
+      var yT = y + metrics.viewport(1)
+
 			graph.getEachNode.find { n =>
 				val node = n.asInstanceOf[GraphicNode]
-				nodeContains(node, x, y)
+				nodeContains(node, xT, yT)
 			} match {
 				case Some(n) => {
 					n.asInstanceOf[GraphicNode]
 				}
 				case None => {
 					graph.spriteSet.find { sprite =>
-						spriteContains(sprite, x, y)
+						spriteContains(sprite, xT, yT)
 					} match {
 						case Some(sprite) => sprite.asInstanceOf[GraphicSprite]
 						case None => null
@@ -218,15 +223,22 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   	  * @param y2 The rectangle highest point ordinate.
   	  * @return The set of sprites and nodes in the given rectangle. */
   	def allNodesOrSpritesIn(graph:GraphicGraph, x1:Double, y1:Double, x2:Double, y2:Double):ArrayList[GraphicElement] = {
+      // add offset of viewport, because find(...) is always called without offset
+      // in most cases the offset of the viewport is 0 anyway
+      var x1T = x1 + metrics.viewport(0)
+      var y1T = y1 + metrics.viewport(1)
+      var x2T = x2 + metrics.viewport(0)
+      var y2T = y2 + metrics.viewport(1)
+
   		val elts = new ArrayList[GraphicElement]
 	
         graph.getEachNode.foreach { node:Node =>	
-  			if(isNodeIn(node.asInstanceOf[GraphicNode], x1, y1, x2, y2))
+  			if(isNodeIn(node.asInstanceOf[GraphicNode], x1T, y1T, x2T, y2T))
   				elts.add( node.asInstanceOf[GraphicNode])
   		}
 		
   		graph.spriteSet.foreach { sprite:GraphicSprite =>
-  			if(isSpriteIn(sprite, x1, y1, x2, y2))
+  			if(isSpriteIn(sprite, x1T, y1T, x2T, y2T))
   				elts.add(sprite)
   		}
 		
@@ -446,25 +458,34 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   	  * If the auto fitting feature is activate the whole graph is always visible. */
   	protected def checkVisibility(graph:GraphicGraph) {
   		nodeInvisible.clear
+			spriteInvisible.clear
 	
   		if(! autoFit) {
   			// If autoFit is on, we know the whole graph is visible anyway.
   			
-  		    val X:Double = metrics.viewport(0)
-  		    val Y:Double = metrics.viewport(1)
-  		    val W:Double = metrics.viewport(2)
+  		  val X:Double = metrics.viewport(0)
+  		  val Y:Double = metrics.viewport(1)
+  		  val W:Double = metrics.viewport(2)
   			val H:Double = metrics.viewport(3)
   		
 	  		graph.getEachNode.foreach { node:Node =>
-	  		    val n:GraphicNode = node.asInstanceOf[GraphicNode]
+  		    val n:GraphicNode = node.asInstanceOf[GraphicNode]
 	  			val visible = isNodeIn(n, X, Y, X+W, Y+H) && (!n.hidden) && n.positionned;
-//	  			val visible = isNodeIn(n, 0, 0, W, H) && (!n.hidden) && n.positionned;
-				
+
 	  			if(! visible) {
 	  				nodeInvisible += node.getId
 	  			}
 	  		}
-  		}
+
+				graph.spriteSet.foreach { sprite:GraphicSprite =>
+					val visible = isSpriteIn(sprite, X, Y, X+W, Y+H) && (!sprite.hidden);
+
+					if(! visible) {
+						spriteInvisible += sprite.getId
+					}
+				}
+
+			}
   	}
 
 
@@ -473,26 +494,18 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   	protected def paddingXpx:Double = if(padding.units == Units.PX && padding.size > 0) padding.get( 0 ) else 0
   	protected def paddingYpx:Double = if(padding.units == Units.PX && padding.size > 1) padding.get( 1 ) else paddingXpx
 
-  	/** Check if a sprite is visible in the current view port.
-  	  * @param sprite The sprite to check.
-  	  * @return True if visible. */
-  	protected def isSpriteVisible(sprite:GraphicSprite):Boolean = isSpriteIn(sprite, 0, 0, metrics.viewport(2), metrics.viewport(3))
-
-
   	/** Check if an edge is visible in the current view port.
   	  * @param edge The edge to check.
   	  * @return True if visible. */
   	protected def isEdgeVisible(edge:GraphicEdge):Boolean = {
-  	    if((!edge.getNode0[GraphicNode].positionned)
-  	    || (!edge.getNode1[GraphicNode].positionned)) {
+  	    if((!edge.getNode0[GraphicNode].positionned) || (!edge.getNode1[GraphicNode].positionned)) {
   	        false
   	    } else if(edge.hidden) {
   	        false
   	    } else {
   	    	val node0Invis = nodeInvisible.contains(edge.getNode0[Node].getId)
-  			val node1Invis = nodeInvisible.contains(edge.getNode1[Node].getId)
-		
-  			! (node0Invis && node1Invis)
+  			  val node1Invis = nodeInvisible.contains(edge.getNode1[Node].getId)
+  			  !(node0Invis && node1Invis)
   	    }
   	}
 
@@ -510,7 +523,6 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   		val src  = new Point3(node.getX, node.getY, 0)
 		
   		bck.transform(src)
-//  		Tx.transform( src, src )
 
   		val x1 = src.x - w2
   		val x2 = src.x + w2
@@ -532,27 +544,25 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   	  * @param Y2 The max ordinate of the area.
   	  * @return True if the node lies in the given area. */
   	protected def isSpriteIn( sprite:GraphicSprite, X1:Double, Y1:Double, X2:Double, Y2:Double ):Boolean = {
-  		if( sprite.isAttachedToNode && ( nodeInvisible.contains( sprite.getNodeAttachment.getId ) ) ) {
-  			false
-  		} else if( sprite.isAttachedToEdge && ! isEdgeVisible( sprite.getEdgeAttachment ) ) {
-  			false
-  		} else {
-  			val size = sprite.getStyle.getSize
-  			val w2   = metrics.lengthToPx( size, 0 ) / 2
-  			val h2   = if( size.size > 1 ) metrics.lengthToPx( size, 1 )/2 else w2
-  			val src  = spritePositionPx( sprite )
-	
-  			val x1 = src.x - w2
-  			val x2 = src.x + w2
-  			val y1 = src.y - h2
-  			val y2 = src.y + h2
-		
-  			if(      x2 < X1 ) false
-  			else if( y2 < Y1 ) false
-  			else if( x1 > X2 ) false
-  			else if( y1 > Y2 ) false
-  			else               true 
-  		}
+			val size = getNodeOrSpriteSize(sprite)
+			val w2   = metrics.lengthToPx( size, 0 ) / 2
+			val h2   = if( size.size > 1 ) metrics.lengthToPx( size, 1 )/2 else w2
+
+			//val src  = new Point3()
+			//getSpritePosition(sprite, src, Units.GU)
+			//bck.transform(src)
+			val src = spritePositionPx(sprite)
+
+			val x1 = src.x - w2
+			val x2 = src.x + w2
+			val y1 = src.y - h2
+			val y2 = src.y + h2
+
+			if(      x2 < X1 ) false
+			else if( y2 < Y1 ) false
+			else if( x1 > X2 ) false
+			else if( y1 > Y2 ) false
+			else               true
   	}
    
   	protected def spritePositionPx(sprite:GraphicSprite):Point3 = getSpritePosition(sprite, new Point3, Units.PX)
@@ -567,8 +577,7 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
   		val w2   = metrics.lengthToPx(size, 0) / 2
   		val h2   = if(size.size() > 1) metrics.lengthToPx(size, 1)/2 else w2
   		val dst  = bck.transform(elt.getX, elt.getY, 0)
-//println(s"nodeContains(${elt.getId}, ${x}, ${y}) -> (${dst.x}, ${dst.y})")
-  		
+
   		val x1 = (dst.x) - w2
   		val x2 = (dst.x) + w2
   		val y1 = (dst.y) - h2
