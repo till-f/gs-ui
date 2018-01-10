@@ -33,21 +33,22 @@ package org.graphstream.ui.j2dviewer
 
 import org.graphstream.ui.geom.Point3
 import java.util.ArrayList
+
 import scala.collection.mutable.HashSet
 import scala.collection.JavaConversions._
 import scala.math._
 import org.graphstream.graph.Node
 import org.graphstream.ui.graphicGraph.stylesheet.Selector.Type._
 import org.graphstream.ui.graphicGraph.{GraphicEdge, GraphicElement, GraphicGraph, GraphicNode, GraphicSprite}
-import org.graphstream.ui.graphicGraph.stylesheet.{Style, Values}
+import org.graphstream.ui.graphicGraph.stylesheet.{Selector, Style, StyleConstants, Values}
 import org.graphstream.ui.graphicGraph.stylesheet.StyleConstants._
 import org.graphstream.ui.util.CubicCurve
 import org.graphstream.ui.swingViewer.util.GraphMetrics
 import org.graphstream.ui.geom.Point2
 import org.graphstream.ui.geom.Vector2
-import org.graphstream.ui.j2dviewer.renderer.{Skeleton, AreaSkeleton, ConnectorSkeleton}
+import org.graphstream.ui.j2dviewer.renderer.{AreaSkeleton, ConnectorSkeleton, Skeleton}
+
 import scala.math._
-import org.graphstream.ui.graphicGraph.stylesheet.StyleConstants
 
 /**
  * Define a view of the graph or a part of the graph.
@@ -197,21 +198,21 @@ class Camera(protected val graph:GraphicGraph) extends org.graphstream.ui.view.C
       var xT = x + metrics.viewport(0)
       var yT = y + metrics.viewport(1)
 
-			graph.getEachNode.find { n =>
-				val node = n.asInstanceOf[GraphicNode]
-				nodeContains(node, xT, yT)
+			// search respecting z-index order (we are looking for top-most element!)
+			val sgs = graph.getStyleGroups
+			sgs.zIndex.toList.reverse.flatten.flatMap { group => group.elements() }.find { element =>
+				if (element.isInstanceOf[GraphicNode]) {
+					nodeContains(element.asInstanceOf[GraphicNode], xT, yT)
+				}
+				else if (element.isInstanceOf[GraphicSprite]) {
+					spriteContains(element.asInstanceOf[GraphicSprite], xT, yT)
+				}
+				else {
+					false
+				}
 			} match {
-				case Some(n) => {
-					n.asInstanceOf[GraphicNode]
-				}
-				case None => {
-					graph.spriteSet.find { sprite =>
-						spriteContains(sprite, xT, yT)
-					} match {
-						case Some(sprite) => sprite.asInstanceOf[GraphicSprite]
-						case None => null
-					}
-				}
+				case (Some(element)) => element.asInstanceOf[GraphicElement]
+				case None => null
 			}
   	}
 
