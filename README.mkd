@@ -14,16 +14,16 @@ This renderer supports almost all of the CSS properties defined in the [GraphStr
 
 We are interested in any suggestion to improve this renderer, and your use cases could be of great help for us in developing this project. If you like and use this project, this could be a good contribution.
 
-Building and jars
------------------
+Building with maven
+-------------------
 
-Building the Scala renderer requires to install the Scala compiler and library, but this can be made easier with the help of maven.
+* Set JAVA_HOME to Java 1.7
+* Make sure that correct "gs-core" dependency is used: run "mvn install" for "gs-core" first
+* Run "mvn package"
+* If all went well, you will find a "gs-ui-<version>-SNAPSHOT.jar" in the "target" directory.
 
-To compile gs-ui, enter this directory and simply enter :
-
-  mvn package
-
-If all went well, you will find a gs-ui-X.Y.jar or a gs-ui-X.Y-git.jar in the "target" directory. This jar is a stand-alone jar that will include the scala clases needed to work.
+Manual build
+------------
 
 I you plan to build the Scala renderer by yourself, you can have a look at the `compile.sh` script (for a Bash shell). It needs to be edited and is really basic, but should give you an idea of what is needed. An easier solution could probably be to install the Scala IDE plug-in for Eclipse or the one for NetBeans. The `gs-ui-bin.jardesc` allows to build a jar of the renderer under eclipse provided you have the Scala plugin. This is how the `gs-ui-bin.jar` is created. The `gs-ui.jar` file is created using the ProGuard tool that allows to put in a jar only the classes that are really needed.
 

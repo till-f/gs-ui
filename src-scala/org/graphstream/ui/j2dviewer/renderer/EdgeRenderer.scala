@@ -60,6 +60,8 @@ class EdgeRenderer(styleGroup:StyleGroup) extends StyleRenderer(styleGroup) {
 	
 	protected def renderElement(bck:Backend, camera:Camera, element:GraphicElement) {
 		val edge = element.asInstanceOf[GraphicEdge]
+		edge.switchDirectionAccordingToStyle()
+
 		val skel = getOrSetConnectorSkeleton(element)
 
 		shape.configureForElement(bck, element, skel, camera)
